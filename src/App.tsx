@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Menu } from 'lucide-react';
-import { ActivityEvent, NavSection, Patient, ROLE_PERMISSIONS, UserRole } from './types';
+import { ActivityEvent, NavSection, Patient, ROLE_NAV_ACCESS, ROLE_PERMISSIONS, UserRole } from './types';
 import { createSeedPatients } from './data/seedPatients';
 import {
   computeFacilityStats,
@@ -65,6 +65,13 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(isSupabaseConfigured);
   const [authProfile, setAuthProfile] = useState<AuthProfile | null>(null);
+
+  // Redirect to Overview if activeSection is not permitted for the current role
+  useEffect(() => {
+    if (!ROLE_NAV_ACCESS[role].includes(activeSection)) {
+      setActiveSection('overview');
+    }
+  }, [role, activeSection]);
 
   // Supabase Auth & initial data load
   useEffect(() => {

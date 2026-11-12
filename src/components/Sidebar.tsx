@@ -11,7 +11,7 @@ import {
   X,
   ShieldCheck,
 } from 'lucide-react';
-import { NavSection, ROLE_PERMISSIONS, UserRole } from '../types';
+import { NavSection, ROLE_NAV_ACCESS, ROLE_PERMISSIONS, UserRole } from '../types';
 
 interface SidebarProps {
   activeSection: NavSection;
@@ -42,13 +42,7 @@ const ROLE_PROFILES: Record<
   },
 };
 
-// FIX 4: Which NavSection each role may visit
-const ROLE_NAV_ACCESS: Record<UserRole, NavSection[]> = {
-  nurse: ['overview', 'patients', 'nurse_station'],
-  doctor: ['overview', 'patients', 'doctor_queue', 'discharge_management'],
-  admin: ['overview', 'patients', 'discharge_management', 'analytics', 'activity_log'],
-  head_doctor: ['overview', 'patients', 'doctor_queue', 'discharge_management', 'analytics', 'activity_log'],
-};
+// Navigation visibility is driven by shared ROLE_NAV_ACCESS in src/types.ts
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeSection,
@@ -151,7 +145,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation */}
       <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 py-4">
-        {navGroups.map((group, gIdx) => (
+        {navGroups
+          .map((group) => ({
+            ...group,
+            items: group.items.filter((item) => allowedSections.includes(item.id)),
+          }))
+          .filter((group) => group.items.length > 0)
+          .map((group, gIdx) => (
           <div key={gIdx}>
             {group.label && (
               <div className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">

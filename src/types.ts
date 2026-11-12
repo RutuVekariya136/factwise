@@ -57,6 +57,13 @@ export type NavSection =
   | 'analytics'
   | 'activity_log';
 
+export const ROLE_NAV_ACCESS: Record<UserRole, NavSection[]> = {
+  nurse: ['overview', 'patients', 'nurse_station'],
+  doctor: ['overview', 'patients', 'doctor_queue', 'discharge_management'],
+  admin: ['overview', 'patients', 'discharge_management', 'analytics', 'activity_log'],
+  head_doctor: ['overview', 'patients', 'doctor_queue', 'discharge_management', 'analytics', 'activity_log'],
+};
+
 export interface ActivityEvent {
   id: string;
   timestamp: string; // YYYY-MM-DD HH:MM
