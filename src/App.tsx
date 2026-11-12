@@ -19,6 +19,19 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { ActivityLogView } from './components/ActivityLogView';
 import { PatientDetailModal } from './components/PatientDetailModal';
 import { AdmitPatientModal } from './components/AdmitPatientModal';
+import { LoginView } from './components/LoginView';
+import { isSupabaseConfigured, supabase } from './lib/supabase';
+import {
+  admitPatientInSupabase,
+  AuthProfile,
+  fetchActivityEventsFromSupabase,
+  fetchAllPatientsFromSupabase,
+  fetchUserProfile,
+  finalizeDischargeInSupabase,
+  insertActivityEventToSupabase,
+  insertDoctorVisitToSupabase,
+  insertTemperatureToSupabase,
+} from './lib/careopsApi';
 
 const STORAGE_KEY = 'careops_patients_v2';
 
@@ -50,6 +63,73 @@ export function App() {
   const [showAdmitModal, setShowAdmitModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(isSupabaseConfigured);
+  const [authProfile, setAuthProfile] = useState<AuthProfile | null>(null);
+
+  // Supabase Auth & initial data load
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadSessionAndData = async () => {
+      try {
+        const { data } = await supabase!.auth.getSession();
+        const user = data.session?.user;
+        if (!user) {
+          if (mounted) {
+            setAuthProfile(null);
+            setAuthLoading(false);
+          }
+          return;
+        }
+        const profile = await fetchUserProfile(user.id);
+        if (mounted && profile) {
+          setAuthProfile({ ...profile, email: user.email });
+          setRole(profile.role);
+          const [dbPatients, dbEvents] = await Promise.all([
+            fetchAllPatientsFromSupabase(),
+            fetchActivityEventsFromSupabase(),
+          ]);
+          if (mounted) {
+            setPatients(dbPatients);
+            setActivityLog(dbEvents);
+          }
+        }
+      } catch {
+        if (mounted) {
+          setToast('Failed to load clinical data from Supabase.');
+        }
+      } finally {
+        if (mounted) setAuthLoading(false);
+      }
+    };
+
+    loadSessionAndData();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        setAuthProfile(null);
+        return;
+      }
+      loadSessionAndData();
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setAuthProfile(null);
+    setActiveSection('overview');
+  };
 
   useEffect(() => {
     try {
@@ -79,14 +159,26 @@ export function App() {
 
   const appendEvent = (event: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
     const time = getCurrentTime();
-    setActivityLog((prev) => [
-      {
-        ...event,
-        id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        timestamp: `${today} ${time}`,
-      },
-      ...prev,
-    ]);
+    const fullEvent: ActivityEvent = {
+      ...event,
+      id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: `${today} ${time}`,
+    };
+    setActivityLog((prev) => [fullEvent, ...prev]);
+    if (isSupabaseConfigured) {
+      insertActivityEventToSupabase({
+        timestamp: fullEvent.timestamp,
+        actor: fullEvent.actor,
+        role: fullEvent.role,
+        patientId: fullEvent.patientId,
+        patientName: fullEvent.patientName,
+        roomNumber: fullEvent.roomNumber,
+        type: fullEvent.type,
+        summary: fullEvent.summary,
+        isUrgentOverride: fullEvent.isUrgentOverride,
+        overrideReason: fullEvent.overrideReason,
+      }).catch(() => {});
+    }
   };
 
   const handleResetDemo = () => {
@@ -130,8 +222,19 @@ export function App() {
     );
 
     if (targetPatient) {
+      if (isSupabaseConfigured) {
+        insertTemperatureToSupabase(targetPatient.id, {
+          date: today,
+          time,
+          tempC,
+          recordedBy: authProfile?.fullName ?? 'Kavita Menon (RN)',
+          note,
+        }).catch((err) => {
+          setToast(`Database policy error: ${err?.message ?? 'Unable to save temperature.'}`);
+        });
+      }
       appendEvent({
-        actor: 'Kavita Menon (RN)',
+        actor: authProfile?.fullName ?? 'Kavita Menon (RN)',
         role: 'nurse',
         patientId: targetPatient.id,
         patientName: targetPatient.name,
@@ -212,6 +315,30 @@ export function App() {
     );
 
     if (targetPatient) {
+      if (isSupabaseConfigured) {
+        insertDoctorVisitToSupabase(
+          targetPatient.id,
+          {
+            date: today,
+            time,
+            doctorName: authProfile?.fullName ?? 'Dr. Arvind Rao',
+            treatmentNote,
+            decision,
+            isCorrection: opts?.isCorrection,
+            correctionReason: opts?.correctionReason,
+            isUrgentOverride: opts?.isUrgentOverride,
+            urgentOverrideReason: opts?.urgentOverrideReason,
+          },
+          decision === 'approve_discharge'
+            ? { status: 'discharge_approved', dischargeApprovedAt: `${today} ${time}` }
+            : decision === 'mark_deceased'
+              ? { status: 'deceased', deceasedAt: today }
+              : undefined
+        ).catch((err) => {
+          setToast(`Database policy error: ${err?.message ?? 'Unable to save visit.'}`);
+        });
+      }
+
       const eventType =
         opts?.isUrgentOverride
           ? 'doctor_visit_urgent_override'
@@ -290,8 +417,13 @@ export function App() {
     );
 
     if (patientName) {
+      if (isSupabaseConfigured) {
+        finalizeDischargeInSupabase(patientId, today).catch((err) => {
+          setToast(`Database policy error: ${err?.message ?? 'Unable to finalize discharge.'}`);
+        });
+      }
       appendEvent({
-        actor: 'S. Deshmukh (Admin)',
+        actor: authProfile?.fullName ?? 'S. Deshmukh (Admin)',
         role: 'admin',
         patientId,
         patientName,
@@ -335,6 +467,11 @@ export function App() {
     };
 
     setPatients((prev) => [newPatient, ...prev]);
+    if (isSupabaseConfigured) {
+      admitPatientInSupabase(newPatient).catch((err) => {
+        setToast(`Database policy error: ${err?.message ?? 'Unable to admit patient.'}`);
+      });
+    }
     appendEvent({
       actor: 'S. Deshmukh (Admin)',
       role: 'admin',
@@ -346,6 +483,18 @@ export function App() {
     });
     setToast(`Admitted ${data.name} to Room ${data.roomNumber}.`);
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F6F8FA] text-[13px] text-[#718096]">
+        Connecting to CareOps...
+      </div>
+    );
+  }
+
+  if (isSupabaseConfigured && !authProfile) {
+    return <LoginView />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F6F8FA] text-[#192B3D]">
@@ -360,6 +509,8 @@ export function App() {
         dischargePendingAdminCount={stats.dischargePendingAdminCount}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
+        authUserName={authProfile?.fullName}
+        onSignOut={isSupabaseConfigured ? handleSignOut : undefined}
       />
 
       {/* Mobile Top Header */}

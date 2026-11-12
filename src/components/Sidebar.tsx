@@ -24,6 +24,8 @@ interface SidebarProps {
   dischargePendingAdminCount: number;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  authUserName?: string;
+  onSignOut?: () => void;
 }
 
 const ROLE_PROFILES: Record<
@@ -59,6 +61,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   dischargePendingAdminCount,
   mobileOpen,
   onCloseMobile,
+  authUserName,
+  onSignOut,
 }) => {
   const perms = ROLE_PERMISSIONS[role];
   const allowedSections = ROLE_NAV_ACCESS[role];
@@ -202,11 +206,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="border-t border-[#263B52] p-3">
         <div className="mb-2 flex items-center gap-2.5 px-1">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#263B52] text-xs font-semibold text-white">
-            {profile.initials}
+            {authUserName
+              ? authUserName
+                  .split(' ')
+                  .map((part) => part[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+              : profile.initials}
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12px] font-semibold text-white">
-              {profile.name}
+              {authUserName ?? profile.name}
             </div>
             <div className="truncate text-[11px] text-slate-400">
               {profile.title}
@@ -214,38 +225,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <label className="block px-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-          Active Role
-        </label>
-        <select
-          value={role}
-          onChange={(e) => onRoleChange(e.target.value as UserRole)}
-          aria-label="Switch user role"
-          className="mt-1 w-full rounded-md border border-[#354E6B] bg-[#263B52] px-2.5 py-1.5 text-[12px] font-medium text-white focus:border-[#087F8C] focus:outline-none cursor-pointer"
-        >
-          <option value="nurse">Nurse (Temperature Rounds)</option>
-          <option value="doctor">Doctor (Clinical Queue)</option>
-          <option value="admin">Admin Staff (Beds &amp; Intake)</option>
-          <option value="head_doctor">Head Doctor (Quality &amp; Ops)</option>
-        </select>
+        {onSignOut ? (
+          <button
+            onClick={onSignOut}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-[#354E6B] bg-transparent px-2.5 py-1.5 text-[11px] font-medium text-slate-300 transition-colors duration-150 hover:bg-[#263B52] hover:text-white cursor-pointer"
+          >
+            <LogOut className="h-3 w-3" />
+            <span>Sign Out</span>
+          </button>
+        ) : (
+          <>
+            <label className="block px-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+              Active Role
+            </label>
+            <select
+              value={role}
+              onChange={(e) => onRoleChange(e.target.value as UserRole)}
+              aria-label="Switch user role"
+              className="mt-1 w-full rounded-md border border-[#354E6B] bg-[#263B52] px-2.5 py-1.5 text-[12px] font-medium text-white focus:border-[#087F8C] focus:outline-none cursor-pointer"
+            >
+              <option value="nurse">Nurse (Temperature Rounds)</option>
+              <option value="doctor">Doctor (Clinical Queue)</option>
+              <option value="admin">Admin Staff (Beds &amp; Intake)</option>
+              <option value="head_doctor">Head Doctor (Quality &amp; Ops)</option>
+            </select>
 
-        <button
-          onClick={onResetDemo}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-[#354E6B] bg-transparent px-2.5 py-1.5 text-[11px] font-medium text-slate-300 transition-colors duration-150 hover:bg-[#263B52] hover:text-white cursor-pointer"
-        >
-          <RotateCcw className="h-3 w-3" />
-          <span>Reset Demo Baseline</span>
-        </button>
+            <button
+              onClick={onResetDemo}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-[#354E6B] bg-transparent px-2.5 py-1.5 text-[11px] font-medium text-slate-300 transition-colors duration-150 hover:bg-[#263B52] hover:text-white cursor-pointer"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>Reset Demo Baseline</span>
+            </button>
 
-        {/* FIX 5 — Demo mode notice */}
-        <div className="mt-3 rounded-md border border-[#354E6B]/60 bg-[#172B43] px-2.5 py-2">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-amber-400/80">
-            ⚠ Demo Mode
-          </p>
-          <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">
-            Data stored in localStorage only. No production security or authentication.
-          </p>
-        </div>
+            {/* FIX 5 — Demo mode notice */}
+            <div className="mt-3 rounded-md border border-[#354E6B]/60 bg-[#172B43] px-2.5 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-amber-400/80">
+                ⚠ Demo Mode
+              </p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">
+                Data stored in localStorage only. No production security or authentication.
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
