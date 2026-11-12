@@ -89,3 +89,4 @@ src/
     ├── AdmitPatientModal.tsx           # Admin patient admission & room assignment
     └── MortalityAlertBanner.tsx        # >15% mortality threshold alert banner
 ```
+
